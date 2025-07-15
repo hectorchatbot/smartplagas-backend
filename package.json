@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hectorchatbot/smartplagas-backend.git"
@@ -19,7 +16,12 @@
   "homepage": "https://github.com/hectorchatbot/smartplagas-backend#readme",
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "twilio": "^5.7.3"
+  },
+  "scripts": {
+    "dev": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   }
 }
