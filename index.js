@@ -1,5 +1,4 @@
 const twilio = require('twilio');
-
 const client = twilio(
   process.env.TWILIO_SID,
   process.env.TWILIO_TOKEN
@@ -13,12 +12,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Endpoint de prueba
 app.get('/', (req, res) => {
   res.send('Backend funcionando 🚀');
 });
 
-// ✅ Endpoint real para enviar WhatsApp
 app.post('/send-whatsapp', async (req, res) => {
   const { to, message } = req.body;
 
@@ -31,7 +28,7 @@ app.post('/send-whatsapp', async (req, res) => {
   try {
     const twilioResponse = await client.messages.create({
       body: message,
-      from: `whatsapp:${process.env.TWILIO_NUMBER}`,
+      from: 'whatsapp:+14155238886',
       to: `whatsapp:${to}`
     });
 
