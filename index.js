@@ -1,54 +1,94 @@
-const twilio = require('twilio');
-const client = twilio(
-  process.env.TWILIO_SID,
-  process.env.TWILIO_TOKEN
-);
-
-const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
+const express = require('express');
+const { MessagingResponse } = require('twilio').twiml;
+const flujo = require('./chatbot-flujo.json');
 
 const app = express();
-app.use(cors());
+
+// ✅ Asegúrate de que esto esté ANTES del webhook para leer el body
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Backend funcionando 🚀');
-});
+const sesiones = {};
 
-app.post('/send-whatsapp', async (req, res) => {
-  const { to, message } = req.body;
+app.post('/webhook-whatsapp', (req, res) => {
+  console.log("📥 Mensaje recibido en webhook");
+  console.log("🔹 req.body completo:", req.body); // 👈 Aquí está el log completo
+  console.log("🔹 From:", req.body.From);
+  console.log("🔹 Body:", req.body.Body);
 
-  console.log('Petición recibida:', to, message);
+  const from = req.body.From;
+  const mensaje = req.body.Body?.trim();
+  const twiml = new MessagingResponse();
 
-  if (!to || !message) {
-    return res.status(400).json({ error: 'Faltan datos' });
+  if (!from || !mensaje) {
+    console.error("❌ Datos inválidos en el request");
+    twiml.message("Error: Datos inválidos.");
+    return res.type('text/xml').send(twiml.toString());
   }
 
-  try {
-    const twilioResponse = await client.messages.create({
-      body: message,
-      from: 'whatsapp:+14155238886',
-      to: `whatsapp:${to}`
-    });
-
-    console.log('Mensaje enviado:', twilioResponse.sid);
-
-    res.json({
-      success: true,
-      sid: twilioResponse.sid,
-      message: `Mensaje enviado a ${to}`
-    });
-  } catch (error) {
-    console.error('Error al enviar WhatsApp:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  if (!sesiones[from]) {
+    sesiones[from] = {
+      nodoActual: flujo[0].id,
+      variables: {},
+    };
   }
+
+  const sesion = sesiones[from];
+  let nodo = flujo.find(n => n.id === sesion.nodoActual);
+
+  if (!nodo) {
+    twiml.message("⚠️ Error interno. Nodo no encontrado.");
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  if (nodo.type === "mensaje") {
+    let texto = nodo.content;
+    Object.keys(sesion.variables).forEach(v => {
+      texto = texto.replaceAll(`{${v}}`, sesion.variables[v]);
+    });
+    twiml.message(texto);
+    sesion.nodoActual = nodo.nextId;
+
+  } else if (nodo.type === "pregunta") {
+    sesion.variables[nodo.variableName] = mensaje;
+    sesion.nodoActual = nodo.nextId;
+
+  } else if (nodo.type === "condicional") {
+    const opcion = nodo.options.find(opt =>
+      mensaje.toLowerCase().includes(opt.text.toLowerCase())
+    );
+
+    if (!opcion) {
+      twiml.message("❌ Opción no válida. Por favor, responde con una de las opciones indicadas.");
+      return res.type('text/xml').send(twiml.toString());
+    }
+
+    sesion.nodoActual = opcion.nextId;
+  }
+
+  const siguiente = flujo.find(n => n.id === sesion.nodoActual);
+
+  if (siguiente) {
+    let texto = siguiente.content || "";
+
+    Object.keys(sesion.variables).forEach(v => {
+      texto = texto.replaceAll(`{${v}}`, sesion.variables[v]);
+    });
+
+    if (["mensaje", "pregunta", "condicional"].includes(siguiente.type)) {
+      twiml.message(texto);
+    }
+
+  } else {
+    twiml.message("✅ Gracias. Hemos completado tu atención.");
+    delete sesiones[from];
+  }
+
+  return res.type('text/xml').send(twiml.toString());
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`✅ SmartPlagas Bot funcionando en puerto ${PORT}`);
 });
